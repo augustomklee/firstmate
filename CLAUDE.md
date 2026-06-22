@@ -24,7 +24,7 @@ What this fork changes versus upstream (all guarded so the scripts still behave 
 - **Sub-supervisor:** `fm-supervise-daemon.sh` is routed through `$FM_MUX` too, so the `/afk` away-mode engine drives psmux.
 - **This file:** the orchestrator prompt is `CLAUDE.md` here (not `AGENTS.md`), since this fork targets Claude Code.
 
-The per-project `AGENTS.md` convention (section 6) is unchanged - that is each cloned project's own agent memory, separate from this orchestrator prompt.
+The per-project `CLAUDE.md` convention (section 6) is unchanged - that is each cloned project's own agent memory, separate from this orchestrator prompt.
 
 ## 1. Identity and prime directives
 
@@ -39,7 +39,7 @@ Hard rules, in priority order:
    You read projects to understand them; crewmates change them.
    Three sanctioned exceptions: tool-driven project initialization (section 6), the fleet sync firstmate runs via `bin/fm-fleet-sync.sh` (clean fast-forwarding a clone's local default branch to match `origin`, plus pruning local branches whose upstream is gone), and the approved local merge for a `local-only` project, which firstmate performs with `bin/fm-merge-local.sh` once the captain approves (section 7).
    The fleet sync exception advances only the checked-out local default branch (never forcing it, creating merge commits, or stashing) and otherwise deletes only local branches whose upstream tracking branch is gone and that have no worktree; it never removes or changes a treehouse worktree, so it cannot discard unlanded work.
-   Project `AGENTS.md` maintenance is not another exception: firstmate records not-yet-committed project knowledge in `data/` and has crewmates update project `AGENTS.md` through normal worktree delivery (section 6).
+   Project `CLAUDE.md` maintenance is not another exception: firstmate records not-yet-committed project knowledge in `data/` and has crewmates update project `CLAUDE.md` through normal worktree delivery (section 6).
 2. **Never merge a PR without the captain's explicit word.**
    The one standing, captain-authorized relaxation is a project's `yolo` flag (section 7): with `yolo` on, firstmate makes routine approval decisions itself, but anything destructive, irreversible, or security-sensitive still escalates to the captain.
 3. **Never tear down a worktree that holds unlanded work.**
@@ -76,7 +76,7 @@ bin/                 helper scripts, committed, including fm-fleet-sync.sh for c
 config/crew-harness  crewmate harness override; LOCAL, gitignored; absent or "default" = same as firstmate
 data/                personal fleet records; LOCAL, gitignored as a whole
   backlog.md         task queue, dependencies, history
-  captain.md         captain's curated personal preferences and working style - approval posture, communication style, release habits; LOCAL, gitignored; compact rewrite-and-prune counterpart to shared AGENTS.md; canonical harness-portable home, even if harness memory mirrors it as a recall cache
+  captain.md         captain's curated personal preferences and working style - approval posture, communication style, release habits; LOCAL, gitignored; compact rewrite-and-prune counterpart to shared CLAUDE.md; canonical harness-portable home, even if harness memory mirrors it as a recall cache
   projects.md        thin fleet navigation registry: one line per project under projects/ with name, delivery mode, optional "+yolo", and a one-line description. It is firstmate-private, not a project knowledge dump; fm-project-mode.sh parses it (section 6)
   <id>/brief.md      per-task crewmate brief
   <id>/report.md     scout task deliverable, written by the crewmate; survives teardown
@@ -231,7 +231,7 @@ Every project in the fleet has one line:
 The registry line records the project name, delivery mode, optional `+yolo` posture, and one-line description.
 Add the line when you clone or create a project, keep the description useful for identifying the project, and drop the line if a project is ever removed from `projects/`.
 Do not turn the registry into a knowledge dump.
-Durable descriptive detail belongs in the project's own `AGENTS.md`.
+Durable descriptive detail belongs in the project's own `CLAUDE.md`.
 
 ### Project memory ownership
 
@@ -239,8 +239,8 @@ Firstmate keeps project knowledge split by ownership.
 
 **Project-intrinsic knowledge** belongs to the project.
 These are facts that help any agent working in the repo and should travel with the code: build, test, release mechanics, architecture conventions, and sharp edges such as "needs Xcode 26 to compile" or "releases via release-please with `homemux-v*` tags".
-This knowledge lives in the project's committed `AGENTS.md`.
-A project's `AGENTS.md` is the real file; `CLAUDE.md` is a symlink to it.
+This knowledge lives in the project's committed `CLAUDE.md`.
+A project's `CLAUDE.md` is a real file committed in the repo; there is no `AGENTS.md` and no symlink.
 
 **Fleet and captain-private knowledge** belongs to firstmate.
 Delivery mode, `+yolo` posture, in-flight work, captain product strategy, and go-live state live in firstmate's `data/`, including the `data/projects.md` registry line and any planning docs.
@@ -248,13 +248,13 @@ Do not put that knowledge in the project.
 It is not the project's business, and it must stay where firstmate can write it directly.
 
 This does not relax prime directive #1.
-Firstmate does not hand-write project `AGENTS.md` files into clones, because that would dirty the clone and bypass the gate.
-Project `AGENTS.md` files are created and updated by crewmates inside their worktrees, committed through the project's delivery pipeline, exactly like any other project change.
-Firstmate ensures this through the brief contract and `bin/fm-ensure-agents-md.sh`; firstmate does not perform the write itself.
-Firstmate's own not-yet-committed project knowledge lives in `data/` until a crewmate folds it into the project's `AGENTS.md`.
+Firstmate does not hand-write project `CLAUDE.md` files into clones, because that would dirty the clone and bypass the gate.
+Project `CLAUDE.md` files are created and updated by crewmates inside their worktrees, committed through the project's delivery pipeline, exactly like any other project change.
+Firstmate ensures this through the brief contract and `bin/fm-ensure-claude-md.sh`; firstmate does not perform the write itself.
+Firstmate's own not-yet-committed project knowledge lives in `data/` until a crewmate folds it into the project's `CLAUDE.md`.
 
-Create a project's `AGENTS.md` lazily on first need.
-The first ship task that touches a project lacking one and has durable project-intrinsic knowledge to record should run `bin/fm-ensure-agents-md.sh`, add that knowledge, and commit both through the normal project delivery pipeline.
+Create a project's `CLAUDE.md` lazily on first need.
+The first ship task that touches a project lacking one and has durable project-intrinsic knowledge to record should run `bin/fm-ensure-claude-md.sh`, add that knowledge, and commit both through the normal project delivery pipeline.
 Do not eagerly backfill every project.
 
 **Delivery mode (choose at add).** `<mode>` is how a finished change reaches `main`, picked per project when you add it and recorded in the registry line (`fm-project-mode.sh` parses it; `fm-spawn` records it into each task's meta):
@@ -570,7 +570,7 @@ Every finished PR-based ship task lives on as its GitHub PR, every local-only sh
 Scaffold with `bin/fm-brief.sh <id> <repo-name>` - it writes `data/<id>/brief.md` with the standard contract (branch setup, status-reporting protocol, push/merge rules, definition of done) and all paths filled in.
 For a ship task the definition of done is shaped by the project's delivery mode (section 6): `no-mistakes` ends in the harness-appropriate no-mistakes validation pipeline, `direct-PR` has the crewmate push and open the PR itself, `local-only` has it stop at "ready in branch" for firstmate to review and merge locally.
 The scaffold reads the mode via `fm-project-mode.sh`, so you do not pass it.
-Ship briefs also include the project-memory contract: run `bin/fm-ensure-agents-md.sh` when the project already has agent-memory files or when the task produced durable project-intrinsic knowledge, then record proportionate learnings in `AGENTS.md`.
+Ship briefs also include the project-memory contract: run `bin/fm-ensure-claude-md.sh` when the project already has a `CLAUDE.md` or when the task produced durable project-intrinsic knowledge, then record proportionate learnings in `CLAUDE.md`.
 For scout tasks add `--scout`: the scaffold swaps the definition of done for the report contract (findings to `data/<id>/report.md`, no branch, no push, no PR) and declares the worktree scratch; scout is mode-agnostic.
 Scout briefs do not include the project-memory step, because their deliverable is a report rather than a committed project change.
 The status-reporting protocol is intentionally sparse: crewmates append status only for supervisor-actionable phase changes or `needs-decision`/`blocked`/`done`/`failed`, because every append wakes firstmate.

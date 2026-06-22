@@ -33,10 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Symlinks must stay intact
+      - name: Orchestrator prompt invariants
         run: |
           set -eu
-          [ "$(readlink CLAUDE.md)" = "AGENTS.md" ] || { echo "::error::CLAUDE.md must be a symlink to AGENTS.md"; exit 1; }
+          [ -f CLAUDE.md ] && [ ! -L CLAUDE.md ] || { echo "::error::CLAUDE.md must be a real file"; exit 1; }
+          [ ! -e AGENTS.md ] || { echo "::error::AGENTS.md must not exist; CLAUDE.md is canonical"; exit 1; }
           [ "$(readlink .claude/skills)" = "../.agents/skills" ] || { echo "::error::.claude/skills must be a symlink to ../.agents/skills"; exit 1; }
       - name: Personal fleet paths must not be tracked
         run: |

@@ -15,7 +15,7 @@
 #                firstmate reviews, captain approves, firstmate merges to local main
 # Scout tasks ignore mode - their deliverable is a report, not a merge.
 # Ship tasks include a project-memory section so durable project-intrinsic
-# learnings can be committed to AGENTS.md through the project's delivery path.
+# learnings can be committed to CLAUDE.md through the project's delivery path.
 # Refuses to overwrite an existing brief.
 set -eu
 
@@ -146,9 +146,9 @@ $RULE1
    append \`needs-decision: {summary of options}\` and stop. Firstmate will reply with the decision.
 
 # Project memory
-If \`AGENTS.md\` or \`CLAUDE.md\` already exists, or if this task produced durable project-intrinsic knowledge, run \`$FM_ROOT/bin/fm-ensure-agents-md.sh .\` in the worktree.
-If this task produced durable project-intrinsic knowledge, record it in \`AGENTS.md\` as part of your change.
-Keep it proportionate: skip \`AGENTS.md\` edits for trivial tasks that produced no durable project knowledge.
+If \`CLAUDE.md\` already exists, or if this task produced durable project-intrinsic knowledge, run \`$FM_ROOT/bin/fm-ensure-claude-md.sh .\` in the worktree.
+If this task produced durable project-intrinsic knowledge, record it in \`CLAUDE.md\` as part of your change.
+Keep it proportionate: skip \`CLAUDE.md\` edits for trivial tasks that produced no durable project knowledge.
 
 # Implementation approach
 Implement test-first using TDD. If your harness has a TDD skill, drive the work with it from the start (claude: \`/tdd\`; codex: \`\$tdd\`); otherwise follow the loop directly: red-green-refactor in vertical slices - one failing test, then the code to make it pass, then refactor, never all the tests up front.
