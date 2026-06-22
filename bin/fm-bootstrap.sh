@@ -12,6 +12,8 @@
 set -u
 
 FM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=bin/fm-mux-lib.sh
+. "$FM_ROOT/bin/fm-mux-lib.sh"
 
 fleet_sync() {
   [ -x "$FM_ROOT/bin/fm-fleet-sync.sh" ] || return 0
@@ -53,6 +55,7 @@ fleet_sync() {
 
 install_cmd() {
   case "$1" in
+    psmux) echo "scoop bucket add psmux https://github.com/psmux/scoop-psmux && scoop install psmux" ;;
     tmux|node|gh) echo "brew install $1  # or the platform's package manager" ;;
     treehouse) echo "curl -fsSL https://kunchenguid.github.io/treehouse/install.sh | sh" ;;
     no-mistakes) echo "curl -fsSL https://raw.githubusercontent.com/kunchenguid/no-mistakes/main/docs/install.sh | sh" ;;
@@ -61,7 +64,8 @@ install_cmd() {
   esac
 }
 
-TOOLS="tmux node gh treehouse no-mistakes gh-axi chrome-devtools-axi lavish-axi"
+# The multiplexer is whatever fm-mux-lib resolved ($FM_MUX): psmux on Windows, tmux elsewhere.
+TOOLS="$FM_MUX node gh treehouse no-mistakes gh-axi chrome-devtools-axi lavish-axi"
 
 if [ "${1:-}" = "install" ]; then
   shift

@@ -8,15 +8,17 @@
 set -u
 
 FM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=bin/fm-proc-lib.sh
+. "$FM_ROOT/bin/fm-proc-lib.sh"
 
 detect_own() {
   # Layer 1: environment markers for verified harnesses.
   [ "${CLAUDECODE:-}" = "1" ] && { echo claude; return; }
   [ "${PI_CODING_AGENT:-}" = "true" ] && { echo pi; return; }
-  # Layer 2: walk the parent chain and match the command name.
+  # Layer 2: walk the parent chain and match the command name (portable proc info).
   local pid=$$ comm args
   for _ in 1 2 3 4 5 6 7 8; do
-    comm=$(ps -o comm= -p "$pid" 2>/dev/null) || break
+    comm=$(fm_proc_comm "$pid"); [ -n "$comm" ] || break
     case "$(basename "$comm")" in
       *claude*) echo claude; return ;;
       *codex*) echo codex; return ;;
@@ -24,7 +26,7 @@ detect_own() {
       pi) echo pi; return ;;
       node*|python*)
         # Bare interpreter: match the harness name in its script path.
-        args=$(ps -o args= -p "$pid" 2>/dev/null)
+        args=$(fm_proc_args "$pid")
         case "$args" in
           *claude*) echo claude; return ;;
           *codex*) echo codex; return ;;
@@ -32,7 +34,7 @@ detect_own() {
           *" pi "*|*/pi) echo pi; return ;;
         esac ;;
     esac
-    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    pid=$(fm_proc_ppid "$pid")
     if [ -z "$pid" ] || [ "$pid" -le 1 ]; then
       break
     fi

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tear down a finished task: return the treehouse worktree, kill the tmux window,
+# Tear down a finished task: return the treehouse worktree, kill the multiplexer window,
 # clear volatile state, refresh/prune the project's clone for PR-based ship tasks,
 # then print a backlog-refresh reminder.
 # REFUSES if the worktree holds work not on any remote, because treehouse return
@@ -14,6 +14,8 @@ set -eu
 
 FM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 "$FM_ROOT/bin/fm-guard.sh" || true
+# shellcheck source=bin/fm-mux-lib.sh
+. "$FM_ROOT/bin/fm-mux-lib.sh"
 STATE="$FM_ROOT/state"
 ID=$1
 FORCE=${2:-}
@@ -98,7 +100,7 @@ if [ -d "$WT" ]; then
   ( cd "$PROJ" && treehouse return --force "$WT" )
 fi
 
-tmux kill-window -t "$T" 2>/dev/null || true
+"$FM_MUX" kill-window -t "$T" 2>/dev/null || true
 rm -f "$STATE/$ID.status" "$STATE/$ID.turn-ended" "$STATE/$ID.check.sh" "$STATE/$ID.meta" "$STATE/$ID.pi-ext.ts"
 if [ "$KIND" != scout ] && [ "$MODE" != local-only ]; then
   "$FM_ROOT/bin/fm-fleet-sync.sh" "$PROJ" || true

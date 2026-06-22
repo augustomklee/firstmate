@@ -28,7 +28,7 @@
 # The marker and the busy-guard solve the same problem — the daemon and the
 # human share one input channel — so they live together under /afk.
 #
-# Reliability model (see AGENTS.md §8):
+# Reliability model (see CLAUDE.md §8):
 #   - Nothing is lost: the #29 watcher enqueues every wake to state/.wake-queue
 #     BEFORE advancing its suppression markers, so a crash/restart/missed
 #     injection is recovered on the next fm-wake-drain.sh. The daemon does not
@@ -52,7 +52,7 @@
 # Usage: fm-supervise-daemon.sh
 #          Long-lived background loop. Normally started by the /afk skill, which
 #          sets state/.afk first. Env knobs:
-#          FM_SUPERVISOR_TARGET     supervisor tmux target (override; otherwise
+#          FM_SUPERVISOR_TARGET     supervisor multiplexer target (override; otherwise
 #                                   auto-discovered from TMUX_PANE, then
 #                                   firstmate:0 fallback)
 #          FM_INJECT_SKIP           |-prefixes force-self-handle bypassing
@@ -86,6 +86,8 @@
 set -u
 
 FM_DAEMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=bin/fm-mux-lib.sh
+. "$FM_DAEMON_DIR/fm-mux-lib.sh"
 
 # --- tunables ---------------------------------------------------------------
 FM_SUPERVISOR_TARGET_DEFAULT="firstmate:0"
@@ -385,7 +387,7 @@ mark_escalated_seen() {  # <kind> <arg> <state>
 # 0 if the pane is currently showing a busy signature (crewmate resumed/working).
 pane_is_busy() {  # <window>
   local win=$1 tail40
-  tail40=$(tmux capture-pane -p -t "$win" -S -40 2>/dev/null) || return 1
+  tail40=$("$FM_MUX" capture-pane -p -t "$win" -S -40 2>/dev/null) || return 1
   printf '%s' "$tail40" | grep -v '^[[:space:]]*$' | tail -6 \
     | grep -qiE "${FM_BUSY_REGEX:-$BUSY_REGEX_DEFAULT}"
 }
@@ -403,10 +405,10 @@ pane_is_busy() {  # <window>
 pane_input_pending() {  # <target>
   local target=$1 cy pane_out line
   # Get the cursor's Y position (0-indexed from the top of the visible pane).
-  cy=$(tmux display-message -p -t "$target" '#{cursor_y}' 2>/dev/null) || return 1
+  cy=$("$FM_MUX" display-message -p -t "$target" '#{cursor_y}' 2>/dev/null) || return 1
   case "$cy" in ''|*[!0-9]*) return 1 ;; esac
   # Capture the full visible pane and extract the cursor line (sed is 1-indexed).
-  pane_out=$(tmux capture-pane -p -t "$target" 2>/dev/null) || return 1
+  pane_out=$("$FM_MUX" capture-pane -p -t "$target" 2>/dev/null) || return 1
   line=$(printf '%s\n' "$pane_out" | sed -n "$((cy + 1))p")
   # Strip trailing whitespace (the cursor position is not "content").
   line="${line%"${line##*[![:space:]]}"}"
@@ -516,7 +518,7 @@ housekeeping() {  # <state>
 # Find a live fm-* window whose task id matches the given marker key.
 window_for_task() {  # <task-key>
   local key=$1 w t
-  for w in $(tmux list-windows -a -F '#{session_name}:#{window_name}' 2>/dev/null | grep ':fm-' || true); do
+  for w in $("$FM_MUX" list-windows -a -F '#{session_name}:#{window_name}' 2>/dev/null | grep ':fm-' || true); do
     t=$(window_to_task "$w")
     [ "$(_stale_key "$t")" = "$key" ] && { printf '%s' "$w"; return 0; }
   done
@@ -554,7 +556,7 @@ inject_msg() {  # <message> [state]
   msg=$(_collapse_newlines "$msg")
   msg="${FM_INJECT_MARK}${msg}"
   target="${FM_SUPERVISOR_TARGET:-$FM_SUPERVISOR_TARGET_DEFAULT}"
-  tmux display-message -p -t "$target" '#{pane_id}' >/dev/null 2>&1 || return 1
+  "$FM_MUX" display-message -p -t "$target" '#{pane_id}' >/dev/null 2>&1 || return 1
   # (3) Busy-guard: never inject into an in-use pane. Two checks:
   #   a) pane_is_busy: the harness shows a busy footer (agent mid-turn).
   #   b) pane_input_pending: the cursor line has non-empty content (a human's
@@ -574,7 +576,7 @@ inject_msg() {  # <message> [state]
   # consumed); submit failure = the composer still has our text (Enter swallowed).
   retries=${FM_INJECT_CONFIRM_RETRIES:-$INJECT_CONFIRM_RETRIES_DEFAULT}
   sleep_s=${FM_INJECT_CONFIRM_SLEEP:-$INJECT_CONFIRM_SLEEP_DEFAULT}
-  if ! tmux send-keys -t "$target" -l "$msg" 2>/dev/null; then
+  if ! "$FM_MUX" send-keys -t "$target" -l "$msg" 2>/dev/null; then
     log "inject failed: send-keys -l returned non-zero"
     return 1
   fi
@@ -582,7 +584,7 @@ inject_msg() {  # <message> [state]
   i=0
   while [ "$i" -lt "$retries" ]; do
     i=$((i + 1))
-    tmux send-keys -t "$target" Enter 2>/dev/null || true
+    "$FM_MUX" send-keys -t "$target" Enter 2>/dev/null || true
     sleep "$sleep_s"
     if ! pane_input_pending "$target"; then
       return 0  # Composer cleared → submit succeeded.
@@ -734,8 +736,8 @@ fm_super_main() {
   local TARGET="$FM_SUPERVISOR_TARGET"
 
   # --- validate supervisor target at startup (a missing target is a typo) ---
-  if ! tmux display-message -p -t "$TARGET" '#{pane_id}' >/dev/null 2>&1; then
-    echo "error: supervisor target '$TARGET' does not resolve to a tmux pane; set FM_SUPERVISOR_TARGET" >&2
+  if ! "$FM_MUX" display-message -p -t "$TARGET" '#{pane_id}' >/dev/null 2>&1; then
+    echo "error: supervisor target '$TARGET' does not resolve to a multiplexer pane; set FM_SUPERVISOR_TARGET" >&2
     log "startup failed: target '$TARGET' not found"
     fm_lock_release "$LOCK" 2>/dev/null || true
     rm -f "$PIDFILE" 2>/dev/null || true
@@ -800,7 +802,7 @@ fm_super_main() {
     # has nowhere to go, and firstmate itself is the consumer of escalations.
     # Catch-up signals persist in state/*.status and flow on the next run, so
     # this delays rather than loses work.
-    if ! tmux display-message -p -t "$TARGET" '#{pane_id}' >/dev/null 2>&1; then
+    if ! "$FM_MUX" display-message -p -t "$TARGET" '#{pane_id}' >/dev/null 2>&1; then
       log "warn: supervisor target '$TARGET' gone; backing off ${INJECT_FAIL_SLEEP}s, will retry"
       # Flush is pointless with no pane; preserve any buffered escalations.
       sleep "$INJECT_FAIL_SLEEP"

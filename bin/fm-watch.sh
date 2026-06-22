@@ -14,6 +14,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 STATE="${FM_STATE_OVERRIDE:-$FM_ROOT/state}"
 mkdir -p "$STATE"
+# shellcheck source=bin/fm-mux-lib.sh
+. "$SCRIPT_DIR/fm-mux-lib.sh"
 
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
@@ -189,7 +191,7 @@ EOF
   # signature means the crewmate finished, is waiting, or is wedged. Each distinct
   # stale state is reported once (.stale-* remembers the hash already reported).
   while IFS= read -r w; do
-    tail40=$(tmux capture-pane -p -t "$w" -S -40 2>/dev/null) || continue
+    tail40=$("$FM_MUX" capture-pane -p -t "$w" -S -40 2>/dev/null) || continue
     h=$(printf '%s' "$tail40" | hash_pane)
     key=$(printf '%s' "$w" | tr ':/.' '___')
     hf="$STATE/.hash-$key"
@@ -213,7 +215,7 @@ EOF
       printf '%s' "$h" > "$hf"
       echo 0 > "$cf"
     fi
-  done < <(tmux list-windows -a -F '#{session_name}:#{window_name}' 2>/dev/null | grep ':fm-' || true)
+  done < <("$FM_MUX" list-windows -a -F '#{session_name}:#{window_name}' 2>/dev/null | grep ':fm-' || true)
 
   # Heartbeat: firstmate reviews the whole fleet at a regular cadence no matter
   # what. Time-based via .last-heartbeat mtime; interval doubles per consecutive

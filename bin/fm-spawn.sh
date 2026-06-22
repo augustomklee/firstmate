@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Spawn a crewmate: tmux window -> treehouse worktree subshell -> agent launched with its brief.
+# Spawn a crewmate: multiplexer window -> treehouse worktree subshell -> agent launched with its brief.
 # Usage: fm-spawn.sh <task-id> <project-dir> [harness|launch-command] [--scout]
 #   With no harness arg, the harness comes from fm-harness.sh crew (config/crew-harness,
 #   falling back to firstmate's own harness). A bare adapter name (claude|codex|
 #   opencode|pi) overrides it for this spawn. A non-flag string containing whitespace
 #   is treated as a RAW launch command - the escape hatch for verifying new adapters.
 #   --scout records kind=scout in the task's meta (report deliverable, scratch worktree;
-#   see AGENTS.md section 7); the default is kind=ship.
+#   see CLAUDE.md section 7); the default is kind=ship.
 # Batch dispatch: pass one or more `id=repo` pairs instead of a single <id> <project>, e.g.
 #     fm-spawn.sh fix-a-k3=projects/foo add-b-q7=projects/bar [--scout]
 #   Each pair re-execs this script in single-task mode, so the single path stays the only
@@ -25,6 +25,8 @@
 set -eu
 
 FM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=bin/fm-mux-lib.sh
+. "$FM_ROOT/bin/fm-mux-lib.sh"
 # Skip the watcher guard when re-exec'd for one pair of a batch (FM_SPAWN_NO_GUARD is
 # set by the batch loop below), so the guard runs once for the batch, not once per pair.
 [ -n "${FM_SPAWN_NO_GUARD:-}" ] || "$FM_ROOT/bin/fm-guard.sh" || true
@@ -65,7 +67,7 @@ PROJ=${POS[1]}
 ARG3=${POS[2]:-}
 
 # The verified launch command per adapter. The knowledge half of each adapter
-# (busy signature, exit command, dialogs, quirks) lives in AGENTS.md section 4.
+# (busy signature, exit command, dialogs, quirks) lives in CLAUDE.md section 4.
 launch_template() {
   # shellcheck disable=SC2016  # single quotes are deliberate: $(cat ...) expands in the crewmate pane, not here
   case "$1" in
@@ -99,33 +101,60 @@ BRIEF="$FM_ROOT/data/$ID/brief.md"
 [ -f "$BRIEF" ] || { echo "error: no brief at $BRIEF" >&2; exit 1; }
 PROJ_ABS="$(cd "$PROJ" && pwd)"
 
-# Same session when firstmate already runs inside tmux; dedicated session otherwise.
+# Same session when firstmate already runs inside the multiplexer; dedicated otherwise.
 if [ -n "${TMUX:-}" ]; then
-  SES=$(tmux display-message -p '#S')
+  SES=$("$FM_MUX" display-message -p '#S')
 else
-  tmux has-session -t firstmate 2>/dev/null || tmux new-session -d -s firstmate
+  "$FM_MUX" has-session -t firstmate 2>/dev/null || "$FM_MUX" new-session -d -s firstmate
   SES=firstmate
 fi
 
 W="fm-$ID"
 T="$SES:$W"
-if tmux list-windows -t "$SES" -F '#{window_name}' | grep -qx "$W"; then
+if "$FM_MUX" list-windows -t "$SES" -F '#{window_name}' | grep -qx "$W"; then
   echo "error: window $T already exists" >&2
   exit 1
 fi
 
-tmux new-window -d -t "$SES" -n "$W" -c "$PROJ_ABS"
-tmux send-keys -t "$T" 'treehouse get' Enter
+"$FM_MUX" new-window -d -t "$SES" -n "$W" -c "$PROJ_ABS"
 
-# Wait for the treehouse subshell: the pane's cwd moves from the project to the worktree.
+# Windows/psmux: treehouse chooses its worktree subshell from $SHELL. A bare pwsh pane
+# has none, so treehouse falls back to cmd.exe, which runs none of the POSIX launch
+# templates and never reports its cwd to the multiplexer. Set the pane's SHELL to bash
+# first; the pane runs pwsh on Windows, hence the pwsh assignment. cygpath presence marks
+# the Windows/MSYS environment - on real Unix, SHELL is already a POSIX shell so this is
+# skipped and treehouse behaves as upstream expects.
+if command -v cygpath >/dev/null 2>&1; then
+  BASHW=$(cygpath -w "$(command -v bash)" 2>/dev/null || true)
+  if [ -n "$BASHW" ]; then
+    "$FM_MUX" send-keys -t "$T" -l "\$env:SHELL='$BASHW'"
+    "$FM_MUX" send-keys -t "$T" Enter
+    sleep 0.3
+  fi
+fi
+
+"$FM_MUX" send-keys -t "$T" 'treehouse get' Enter
+
+# Wait for the treehouse worktree subshell, then capture its path. tmux
+# #{pane_current_path} does NOT follow treehouse's child subshell on psmux/Windows, so
+# instead probe the subshell's own cwd: print a delimited marker and read it back. Before
+# treehouse enters the worktree the marker shows the project dir (skipped); once inside it
+# shows the worktree. `pwd` works in both bash and pwsh, and the `_/` in the match anchors
+# on a POSIX path so the pwsh-side echo (Windows path) is ignored. cygpath -u normalizes
+# to MSYS form (no-op on real Unix) so WT is usable by the bash path operations below.
 WT=""
 for _ in $(seq 1 60); do
-  p=$(tmux display-message -p -t "$T" '#{pane_current_path}' 2>/dev/null || true)
-  if [ -n "$p" ] && [ "$p" != "$PROJ_ABS" ]; then
-    WT="$p"
-    break
-  fi
+  "$FM_MUX" send-keys -t "$T" -l 'echo FM_WT_$(pwd)_END'
+  "$FM_MUX" send-keys -t "$T" Enter
   sleep 1
+  line=$("$FM_MUX" capture-pane -p -t "$T" -S -6 2>/dev/null | grep -a 'FM_WT_/' | tail -1 || true)
+  case "$line" in
+    *FM_WT_/*)
+      p=${line#*FM_WT_}; p=${p%_END}
+      p=$(cygpath -u "$p" 2>/dev/null || printf '%s' "$p")
+      [ -n "$p" ] && [ "$p" != "$PROJ_ABS" ] && { WT="$p"; break; }
+      ;;
+  esac
 done
 if [ -z "$WT" ]; then
   echo "error: treehouse get did not enter a worktree within 60s; inspect window $T" >&2
@@ -182,7 +211,7 @@ EOF
     ;;
 esac
 
-# Per-project delivery mode + yolo flag (bin/fm-project-mode.sh; AGENTS.md sections 6-7).
+# Per-project delivery mode + yolo flag (bin/fm-project-mode.sh; CLAUDE.md sections 6-7).
 # Recorded in meta so fm-teardown's safety check and the validate/merge stages can
 # branch on them. Mode governs ship tasks; a scout's deliverable is a report, not a
 # merge, so scout teardown ignores mode.
@@ -205,8 +234,8 @@ mkdir -p "$FM_ROOT/state"
 LAUNCH=${LAUNCH//__BRIEF__/$BRIEF}
 LAUNCH=${LAUNCH//__TURNEND__/$TURNEND}
 LAUNCH=${LAUNCH//__PIEXT__/$FM_ROOT/state/$ID.pi-ext.ts}
-tmux send-keys -t "$T" -l "$LAUNCH"
+"$FM_MUX" send-keys -t "$T" -l "$LAUNCH"
 sleep 0.3
-tmux send-keys -t "$T" Enter
+"$FM_MUX" send-keys -t "$T" Enter
 
 echo "spawned $ID harness=$HARNESS kind=$KIND mode=$MODE yolo=$YOLO window=$T worktree=$WT"
