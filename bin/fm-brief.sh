@@ -150,6 +150,12 @@ If \`AGENTS.md\` or \`CLAUDE.md\` already exists, or if this task produced durab
 If this task produced durable project-intrinsic knowledge, record it in \`AGENTS.md\` as part of your change.
 Keep it proportionate: skip \`AGENTS.md\` edits for trivial tasks that produced no durable project knowledge.
 
+# Implementation approach
+Implement test-first using TDD. If your harness has a TDD skill, drive the work with it from the start (claude: \`/tdd\`; codex: \`\$tdd\`); otherwise follow the loop directly: red-green-refactor in vertical slices - one failing test, then the code to make it pass, then refactor, never all the tests up front.
+Tests must verify behaviour through public interfaces, not implementation details, so they survive refactors.
+Match the project's domain vocabulary in \`CONTEXT.md\` and respect any ADRs in \`docs/adr/\` for the area you touch.
+If this task has an originating issue, make your PR close it (e.g. \`Closes #{N}\` in the PR body).
+
 $DOD
 EOF
 echo "scaffolded: $BRIEF (ship, mode=$MODE; replace {TASK})"
