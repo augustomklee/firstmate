@@ -170,22 +170,22 @@ ensure_home() {
   local requested=$1 home
   if [ "$requested" = "-" ]; then
     home=$(acquire_treehouse_home)
-    [ "${SEED_ROLLBACK_ACTIVE:-0}" = 1 ] && SEED_HOME="$home"
-    refuse_active_home_path "$home" || return 1
-    [ -f "$home/AGENTS.md" ] || { echo "error: $home is not a firstmate home (missing AGENTS.md)" >&2; return 1; }
-    [ -d "$home/bin" ] || { echo "error: $home is not a firstmate home (missing bin/)" >&2; return 1; }
-    printf '%s\n' "$(cd "$home" && pwd -P)"
+    verify_firstmate_home "$home"
     return
   fi
 
   home=$(abs_path_for_new "$requested")
-  [ "${SEED_ROLLBACK_ACTIVE:-0}" = 1 ] && SEED_HOME="$home"
-  refuse_active_home_path "$home" || return 1
   if [ -e "$home" ]; then
     [ -d "$home" ] || { echo "error: $home exists and is not a directory" >&2; return 1; }
   else
     git clone --quiet "$FM_ROOT" "$home"
   fi
+  verify_firstmate_home "$home"
+}
+
+verify_firstmate_home() {
+  local home=$1
+  refuse_active_home_path "$home" || return 1
   [ -f "$home/AGENTS.md" ] || { echo "error: $home is not a firstmate home (missing AGENTS.md)" >&2; return 1; }
   [ -d "$home/bin" ] || { echo "error: $home is not a firstmate home (missing bin/)" >&2; return 1; }
   printf '%s\n' "$(cd "$home" && pwd -P)"
@@ -257,6 +257,7 @@ EOF
 SEED_ROLLBACK_ACTIVE=0
 SEED_COMMITTED=0
 SEED_HOME=
+SEED_HOME_ACQUIRED=0
 SEED_HOME_CREATED=0
 SEED_HOME_BACKED_UP=0
 SEED_BACKUP_DIR=
@@ -279,6 +280,60 @@ restore_seed_file() {
   fi
 }
 
+seed_path_is_ancestor_of() {
+  local ancestor=$1 path=$2
+  [ -n "$ancestor" ] || return 1
+  [ -n "$path" ] || return 1
+  [ "$ancestor" != "$path" ] || return 1
+  case "$path" in
+    "$ancestor"/*) return 0 ;;
+  esac
+  return 1
+}
+
+seed_rollback_target() {
+  local target=$1 label=$2 abs_target abs_home abs_root
+  [ -n "$target" ] || return 1
+  [ "$target" != "/" ] || { echo "REFUSED: unsafe $label rollback target $target" >&2; return 1; }
+  if [ -d "$target" ]; then
+    abs_target=$(cd "$target" && pwd -P)
+  else
+    [ -d "$(dirname "$target")" ] || { echo "REFUSED: unsafe $label rollback target $target" >&2; return 1; }
+    abs_target=$(cd "$(dirname "$target")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$target")")
+  fi
+  abs_home=$(resolved_path "$FM_HOME")
+  abs_root=$(resolved_path "$FM_ROOT")
+  if [ "$abs_target" = "$abs_home" ]; then
+    echo "REFUSED: unsafe $label rollback target $target is the active firstmate home" >&2
+    return 1
+  fi
+  if [ "$abs_target" = "$abs_root" ]; then
+    echo "REFUSED: unsafe $label rollback target $target is the firstmate repo" >&2
+    return 1
+  fi
+  if seed_path_is_ancestor_of "$abs_target" "$abs_home"; then
+    echo "REFUSED: unsafe $label rollback target $target is an ancestor of the active firstmate home" >&2
+    return 1
+  fi
+  if seed_path_is_ancestor_of "$abs_target" "$abs_root"; then
+    echo "REFUSED: unsafe $label rollback target $target is an ancestor of the firstmate repo" >&2
+    return 1
+  fi
+  printf '%s\n' "$abs_target"
+}
+
+seed_return_treehouse_home() {
+  local home=$1 abs_home
+  abs_home=$(seed_rollback_target "$home" "treehouse-acquired home") || return 0
+  ( cd "$FM_ROOT" && treehouse return --force "$abs_home" ) >/dev/null 2>&1 || true
+}
+
+seed_remove_created_home() {
+  local home=$1 abs_home
+  abs_home=$(seed_rollback_target "$home" "created home") || return 0
+  rm -rf -- "$abs_home" 2>/dev/null || true
+}
+
 seed_rollback() {
   local project_path
   [ "${SEED_ROLLBACK_ACTIVE:-0}" = 1 ] || return 0
@@ -292,8 +347,10 @@ seed_rollback() {
   fi
 
   if [ -n "${SEED_HOME:-}" ] && [ "$SEED_HOME" != "/" ]; then
-    if [ "$SEED_HOME_CREATED" = 1 ]; then
-      rm -rf -- "$SEED_HOME" 2>/dev/null || true
+    if [ "$SEED_HOME_ACQUIRED" = 1 ]; then
+      seed_return_treehouse_home "$SEED_HOME"
+    elif [ "$SEED_HOME_CREATED" = 1 ]; then
+      seed_remove_created_home "$SEED_HOME"
     else
       if [ -n "${SEED_CREATED_PROJECTS_FILE:-}" ] && [ -f "$SEED_CREATED_PROJECTS_FILE" ]; then
         while IFS= read -r project_path; do
@@ -404,6 +461,7 @@ seed_home() {
   SEED_ROLLBACK_ACTIVE=1
   SEED_COMMITTED=0
   SEED_HOME=
+  SEED_HOME_ACQUIRED=0
   SEED_HOME_CREATED=0
   SEED_HOME_BACKED_UP=0
   SEED_BACKUP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/fm-home-seed.XXXXXX")
@@ -423,8 +481,10 @@ seed_home() {
   fi
 
   if [ "$requested_home" = "-" ]; then
-    SEED_HOME_CREATED=1
-    home=$(ensure_home "$requested_home")
+    SEED_HOME_ACQUIRED=1
+    home=$(acquire_treehouse_home)
+    SEED_HOME="$home"
+    home=$(verify_firstmate_home "$home")
   else
     requested_abs=$(abs_path_for_new "$requested_home")
     SEED_HOME="$requested_abs"
