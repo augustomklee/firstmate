@@ -73,7 +73,7 @@ data/                personal fleet records; LOCAL, gitignored as a whole
   backlog.md         task queue, dependencies, history
   captain.md         captain's curated personal preferences and working style - approval posture, communication style, release habits; LOCAL, gitignored; compact rewrite-and-prune counterpart to shared AGENTS.md; canonical harness-portable home, even if harness memory mirrors it as a recall cache
   projects.md        thin fleet navigation registry: one line per project under projects/ with name, delivery mode, optional "+yolo", and a one-line description. It is firstmate-private, not a project knowledge dump; fm-project-mode.sh parses it (section 6)
-  firstmates.md      sub-firstmate routing table: one line per persistent domain supervisor, with a natural-language scope, non-exclusive project clone list, and home path; fm-home-seed.sh maintains and validates home uniqueness (section 6)
+  firstmates.md      sub-firstmate routing table: one line per persistent domain supervisor, with a natural-language scope, non-exclusive project clone list, and home path; fm-home-seed.sh maintains it and rejects duplicate ids, duplicate homes, and overlapping home paths (section 6)
   <id>/brief.md      per-task crewmate brief, or per-sub-firstmate charter brief when kind=firstmate
   <id>/report.md     scout task deliverable, written by the crewmate; survives teardown
 projects/            cloned repos; gitignored; READ-ONLY for you
@@ -243,7 +243,11 @@ Every persistent sub-firstmate has one line:
 
 The `scope:` field is used during intake; the `projects:` field is a non-exclusive clone list, not ownership.
 Use `bin/fm-home-seed.sh <id> <home|-> <project>...` after scaffolding the charter to provision the persistent home and registry entry; `-` asks `treehouse get` for the home.
+Projects supplied to a sub-firstmate must be remote-backed `no-mistakes` or `direct-PR` projects; `local-only` project routes are refused.
 The charter must be filled before seeding; direct seed without a preexisting brief requires `FM_FIRSTMATE_CHARTER`.
+Seeding is transactional: failures restore parent registry and charter state, then remove or return any home or project clone created during that attempt.
+Seeding also refuses unsafe home paths, symlinked leaf files, remote-backed projects without an origin, and project destinations outside the sub-home.
+Registry validation rejects duplicate ids, duplicate homes, and overlapping home paths.
 
 ### Project memory ownership
 
@@ -424,6 +428,7 @@ Run `bin/fm-teardown.sh <id>` for `kind=firstmate` only when the captain or main
 The safety check is the sub-firstmate's own home: teardown refuses while its `state/*.meta` contains in-flight work.
 When it is safe, teardown kills the direct tmux window, removes the `data/firstmates.md` route, clears the main home metadata, and removes the retired sub-firstmate home.
 With `--force`, teardown is the explicit discard path: it kills child windows, discards child work and sub-home state, removes the route, and removes the retired sub-firstmate home.
+Before any forced cleanup, teardown validates the seeded marker, nested sub-firstmate homes, and child worktree targets; a refusal leaves windows, metadata, homes, and child work untouched.
 
 ### Scout tasks (report instead of PR)
 

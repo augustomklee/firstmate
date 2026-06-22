@@ -9,10 +9,16 @@
 #       That project list is non-exclusive provisioning data. The charter brief
 #       is copied to data/charter.md, no-mistakes projects are initialized,
 #       a .fm-sub-firstmate-home marker is written, and data/firstmates.md is updated.
+#       Only remote-backed no-mistakes and direct-PR projects are supported;
+#       local-only projects are refused.
+#       Unsafe homes, symlinked leaf files, and project destinations outside the
+#       sub-home are refused before setup proceeds.
+#       Setup is transactional: failures restore route/charter state and remove
+#       or return homes and project clones created during that attempt.
 #       Set FM_FIRSTMATE_SCOPE='<scope>' to override the registry routing scope.
 #       Otherwise the registry summary and scope are derived from the filled charter brief.
 #   fm-home-seed.sh validate
-#       Refuse duplicate home assignments in data/firstmates.md.
+#       Refuse duplicate ids, duplicate homes, and overlapping home paths in data/firstmates.md.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

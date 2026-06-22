@@ -163,9 +163,11 @@ The first mate drives these; you rarely need to, but they work by hand too.
 The shared orchestrator behavior lives in `AGENTS.md` - edit it like any prompt when the fleet is empty, or dispatch shared-repo edits to a crewmate while tasks are in flight.
 Personal preferences for one captain's fleet live locally in `data/captain.md`; it is gitignored and read after `data/projects.md` and optional `data/firstmates.md` during bootstrap.
 Persistent sub-firstmate routes live locally in `data/firstmates.md`.
-Each line records the sub-firstmate id, charter summary, absolute home path, natural-language scope, project clone list, and added date; `fm-home-seed.sh validate` refuses duplicate home assignments.
+Each line records the sub-firstmate id, charter summary, absolute home path, natural-language scope, project clone list, and added date; `fm-home-seed.sh validate` refuses duplicate ids, duplicate homes, and overlapping home paths.
 The main first mate routes by reading those scopes with judgment; the project list is provisioning data, not exclusive ownership.
 Sub-firstmate routes cover `no-mistakes` and `direct-PR` projects; `local-only` projects remain main-firstmate work.
+Home seeding is transactional: failed setup restores the parent route and charter state, then removes or returns any home or project clone it created.
+Pass `-` as the home path to allocate a fresh firstmate home through `treehouse get`; explicit home paths are validated before use.
 `FM_HOME` selects the operational home for one firstmate instance.
 When it is unset, the repo root is the home; when it is set, scripts still run from this repo's `bin/`, but `state/`, `data/`, `config/`, and `projects/` come from `$FM_HOME`.
 Harness support is a table in section 4: claude, codex, opencode, and pi are all empirically verified; new harnesses get verified through a supervised trial task before joining the table.

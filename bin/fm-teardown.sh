@@ -10,8 +10,10 @@
 # Sub-firstmates (kind=firstmate in meta) are retired explicitly. Normal
 # teardown refuses while their home has in-flight crewmate meta files; --force
 # discards that child work, kills child windows, and removes the retired home.
+# Forced sub-firstmate cleanup prevalidates the seeded home, nested homes, and
+# child worktree targets before killing windows or removing files.
 # Usage: fm-teardown.sh <task-id> [--force]
-#   --force skips the unpushed-work check. Only use it when the captain has
+#   --force is the explicit discard path. Only use it when the captain has
 #   explicitly said to discard the work.
 set -eu
 
