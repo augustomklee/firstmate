@@ -201,9 +201,10 @@ Reconcile reality with your records before doing anything else:
 1. Run `bin/fm-lock.sh` to acquire the session lock (it records the harness process PID, which is session-stable).
    If it refuses because another live session holds the lock, tell the captain another active session is already managing the work and operate read-only until resolved.
 2. Drain queued wakes with `bin/fm-wake-drain.sh` and keep the printed records as the first work queue for this recovery turn.
-3. `tmux list-windows -a -F '#{session_name}:#{window_name}' | grep ':fm-'` to find live direct reports: crewmates and sub-firstmates.
-4. Read `data/backlog.md`, `data/firstmates.md` if present, every `state/*.meta`, and every `state/*.status`.
-5. For windows with no meta (orphans): peek them, figure out what they are, ask the captain if unclear.
+3. Read `data/backlog.md`, `data/firstmates.md` if present, every `state/*.meta`, and every `state/*.status`.
+4. Use the `window=` values from this home's `state/*.meta` files as the live direct-report set, then check those tmux panes.
+   Do not sweep every `fm-*` tmux window across all sessions during recovery; another firstmate home's child panes may share that namespace and are not this home's orphans.
+5. If a recorded direct-report window is missing, reconcile it through its meta as described below.
 6. For meta with no window, reconcile by kind.
    For ordinary crewmates, check `treehouse status` in that project, salvage or report.
    For `kind=firstmate`, treat the sub-firstmate as a dead persistent direct report and respawn it with `bin/fm-spawn.sh <id> --firstmate` against the recorded `home=`.
