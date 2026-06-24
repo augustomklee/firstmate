@@ -80,7 +80,8 @@ cd firstmate && claude
 ```
 
 That is the whole install.
-On first launch the first mate detects what its toolchain is missing (tmux, treehouse, no-mistakes, gh-axi, chrome-devtools-axi, lavish-axi), lists it with the exact install commands, and installs only after you say go.
+On first launch the first mate detects what its required toolchain is missing (tmux, treehouse, no-mistakes, gh-axi, chrome-devtools-axi, lavish-axi), lists it with the exact install commands, and installs only after you say go.
+If a compatible `tasks-axi` is already on `PATH`, bootstrap records it as an optional capability and routes backlog mutations through it; otherwise firstmate hand-edits `data/backlog.md`.
 
 **Run it inside tmux for the best experience.**
 firstmate works from any terminal - outside tmux, crewmates land in a detached `firstmate` session you can attach to - but launching your harness from inside tmux puts every crewmate window in your own session, one per task, where you can watch the crew work in real time or type into any window to intervene.
@@ -132,7 +133,7 @@ The first mate drives these; you rarely need to, but they work by hand too.
 
 | Script                   | Description                                                                                                         |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `fm-bootstrap.sh`        | Detect missing toolchain pieces; refresh clones best-effort; install tools only after consent                       |
+| `fm-bootstrap.sh`        | Detect required toolchain problems and optional capability facts (e.g. tasks-axi); refresh clones best-effort; install tools only after consent |
 | `fm-fleet-sync.sh`       | Fetch clones, clean-fast-forward their checked-out default branches, and safely prune branches whose remote is gone |
 | `fm-brief.sh`            | Scaffold a ship brief, or a report-only scout brief with `--scout`                                                  |
 | `fm-ensure-claude-md.sh` | Ensure a project's `CLAUDE.md` is the real memory file (migrating any legacy `AGENTS.md`)                            |
@@ -146,6 +147,7 @@ The first mate drives these; you rarely need to, but they work by hand too.
 | `fm-wake-drain.sh`       | Atomically drain queued watcher wakes before handling supervision work                                              |
 | `fm-send.sh`             | Send one verified literal line (or `--key Escape`) to a crewmate window; exits non-zero when Enter is positively swallowed |
 | `fm-tmux-lib.sh`         | Shared multiplexer pane primitives for busy detection, dim-ghost-aware and border-aware composer detection, and verified submit retry |
+| `fm-tasks-axi-lib.sh`    | Shared tasks-axi compatibility probe (>=0.1.1) for bootstrap and teardown backlog routing                          |
 | `fm-peek.sh`             | Print a bounded tail of a crewmate pane                                                                             |
 | `fm-pr-check.sh`         | Record a PR-ready task and arm the watcher's merge poll                                                             |
 | `fm-promote.sh`          | Promote a scout task in place so it becomes a protected ship task                                                   |
@@ -156,6 +158,7 @@ The first mate drives these; you rarely need to, but they work by hand too.
 ## Configuration
 
 The shared orchestrator behavior lives in `CLAUDE.md` - edit it like any prompt when the fleet is empty, or dispatch shared-repo edits to a crewmate while tasks are in flight.
+The tracked `.tasks.toml` pins the optional `tasks-axi` markdown backend to `data/backlog.md`; backlog mutations route through `tasks-axi` when a compatible version is installed and fall back to manual edits otherwise.
 Personal preferences for one captain's fleet live locally in `data/captain.md`; it is gitignored and read after `data/projects.md` during bootstrap.
 Harness support is a table in section 4: claude, codex, opencode, and pi are all empirically verified; new harnesses get verified through a supervised trial task before joining the table.
 
@@ -189,7 +192,7 @@ FM_HOUSEKEEPING_TICK=15            # seconds between batch-flush, stale-recheck,
 
 ## Development
 
-Tracked changes to firstmate itself, including `CLAUDE.md`, `README.md`, `CONTRIBUTING.md`, `.github/workflows/`, `bin/`, and agent skill files, ship through the `no-mistakes` pipeline on a feature branch and require the captain's explicit merge approval.
+Tracked changes to firstmate itself, including `CLAUDE.md`, `README.md`, `CONTRIBUTING.md`, `.tasks.toml`, `.github/workflows/`, `bin/`, and agent skill files, ship through the `no-mistakes` pipeline on a feature branch and require the captain's explicit merge approval.
 When supervising live crewmates, keep long validation or build work in the background so watcher wakes can still be handled.
 Human-authored pull requests targeting `main` must be raised through `git push no-mistakes`; see `CONTRIBUTING.md` for the enforced contributor workflow.
 Local `.no-mistakes/` state and test evidence stay out of this repo; `.no-mistakes.yaml` keeps evidence in a temp directory instead.

@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Bootstrap detection, best-effort fleet refresh/prune, and installs.
 # Usage: fm-bootstrap.sh
-#          Detect: prints one line per problem and exits 0. Silent = all good.
+#          Detect: prints one line per problem or capability fact and exits 0.
+#          Silent = all good.
 #          Lines: "MISSING: <tool> (install: <command>)", "NEEDS_GH_AUTH",
-#                 "CREW_HARNESS_OVERRIDE: <name>", "FLEET_SYNC: <repo>: skipped: <reason>".
+#                 "CREW_HARNESS_OVERRIDE: <name>", "FLEET_SYNC: <repo>: skipped: <reason>",
+#                 "TASKS_AXI: available".
+#          tasks-axi is an OPTIONAL backlog-management capability reported only
+#          when tasks-axi --version is 0.1.1 or newer. It is never a MISSING line
+#          and never prompts an install.
 #          Fleet sync fetches, fast-forwards, and prunes gone local branches;
 #          it is bounded by FM_FLEET_SYNC_BOOTSTRAP_TIMEOUT, default 20s.
 #          Set FM_FLEET_PRUNE=0 to skip branch pruning during that refresh.
@@ -14,6 +19,8 @@ set -u
 FM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=bin/fm-mux-lib.sh
 . "$FM_ROOT/bin/fm-mux-lib.sh"
+# shellcheck source=bin/fm-tasks-axi-lib.sh
+. "$FM_ROOT/bin/fm-tasks-axi-lib.sh"
 
 fleet_sync() {
   [ -x "$FM_ROOT/bin/fm-fleet-sync.sh" ] || return 0
@@ -95,6 +102,10 @@ gh auth status >/dev/null 2>&1 || echo "NEEDS_GH_AUTH"
 crew=
 [ -f "$FM_ROOT/config/crew-harness" ] && crew=$(tr -d '[:space:]' < "$FM_ROOT/config/crew-harness" || true)
 [ -n "$crew" ] && [ "$crew" != "default" ] && echo "CREW_HARNESS_OVERRIDE: $crew"
+# Optional capability, not a required tool: reported only when a compatible
+# tasks-axi (>=0.1.1) is on PATH, so it is never a MISSING line and never prompts
+# an install. Absent or too old => silent, behavior unchanged.
+fm_tasks_axi_compatible && echo "TASKS_AXI: available"
 ensure_crew_session
 fleet_sync
 exit 0

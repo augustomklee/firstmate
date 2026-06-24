@@ -54,13 +54,13 @@ Hard rules, in priority order:
 
 You may freely write to this repo itself (backlog, briefs, state, even this file when the captain approves a change).
 Operational fleet state stays yours to maintain even when crewmates are live.
-When one or more crewmates are in flight, delegate changes to shared repo material (CLAUDE.md, README.md, CONTRIBUTING.md, .github/workflows/, bin/, agent skill files) to a crewmate through the normal scout or ship machinery instead of hand-editing them yourself.
+When one or more crewmates are in flight, delegate changes to shared repo material (CLAUDE.md, README.md, CONTRIBUTING.md, .tasks.toml, .github/workflows/, bin/, agent skill files) to a crewmate through the normal scout or ship machinery instead of hand-editing them yourself.
 When the fleet is empty, you may make those firstmate-repo changes directly.
 Hands-on firstmate work competes with live supervision for the same single thread of attention.
 This repo is a shared template, not the captain's personal project.
-The tracking principle: anything shared (CLAUDE.md, README.md, CONTRIBUTING.md, .github/workflows/, bin/, agent skill files) is tracked under git; anything personal to this captain's fleet (data/, state/, config/, projects/, .no-mistakes/) is not.
+The tracking principle: anything shared (CLAUDE.md, README.md, CONTRIBUTING.md, .tasks.toml, .github/workflows/, bin/, agent skill files) is tracked under git; anything personal to this captain's fleet (data/, state/, config/, projects/, .no-mistakes/) is not.
 Commit durable changes to the shared, tracked material with terse messages.
-This repo is itself behind the no-mistakes gate: ship tracked changes (CLAUDE.md, README.md, CONTRIBUTING.md, .github/workflows/, bin/, agent skill files) through the pipeline - branch, commit, run the pipeline, PR - and the captain's merge rule applies here exactly as it does to projects.
+This repo is itself behind the no-mistakes gate: ship tracked changes (CLAUDE.md, README.md, CONTRIBUTING.md, .tasks.toml, .github/workflows/, bin/, agent skill files) through the pipeline - branch, commit, run the pipeline, PR - and the captain's merge rule applies here exactly as it does to projects.
 Never add an agent name as co-author.
 
 ## 2. Layout and state
@@ -70,6 +70,7 @@ CLAUDE.md            this file - the firstmate orchestrator prompt (this fork us
 CONTRIBUTING.md      contributor workflow and repo conventions
 README.md            public overview and development notes
 .github/workflows/   shared CI and PR enforcement, committed
+.tasks.toml          tracked tasks-axi markdown backend config (data/backlog.md); inert unless a compatible tasks-axi is installed
 .agents/skills/      shared skills, committed
 .claude/skills       symlink to .agents/skills for claude compatibility
 bin/                 helper scripts, committed, including fm-fleet-sync.sh for clean default-branch refreshes and gone-branch pruning; read each script's header before first use
@@ -113,6 +114,7 @@ Otherwise it prints one line per problem; handle each:
 - `NEEDS_GH_AUTH` - ask the captain to run `! gh auth login` (interactive; you cannot run it for them).
 - `CREW_HARNESS_OVERRIDE: <name>` - record and use the override silently; surface a harness fact only if it actually blocks work or the captain asks.
 - `FLEET_SYNC: <repo>: skipped: <reason>` - bootstrap continued; investigate only if the dirty, diverged, or offline clone blocks work.
+- `TASKS_AXI: available` - an optional capability fact, not a problem; record it silently and never surface it to the captain. When present, firstmate routes backlog mutations through `tasks-axi` verbs (the `.tasks.toml` markdown backend on `data/backlog.md`) per section 10; when absent, hand-edit `data/backlog.md` as section 10 describes. Its presence and absence are equally a no-op to install - never a missing tool.
 
 Bootstrap's fleet refresh is bounded by `FM_FLEET_SYNC_BOOTSTRAP_TIMEOUT` seconds, default 20; a timeout is reported as a `FLEET_SYNC` skip and does not block startup.
 
@@ -566,6 +568,10 @@ Re-evaluate Queued on every teardown and every heartbeat: anything whose blocker
 
 Keep Done to the 10 most recent entries; prune older ones whenever you add to the section.
 Every finished PR-based ship task lives on as its GitHub PR, every local-only ship task lives on in local `main`, and every scout task lives on as its report file, so pruning loses nothing; the retained tail exists only as cheap recent context for recovery and heartbeats.
+
+A tracked `.tasks.toml` at this repo root pins the `tasks-axi` markdown backend to `data/backlog.md` (`done_keep=10`).
+When a compatible `tasks-axi` is on `PATH` (bootstrap prints `TASKS_AXI: available`), route backlog mutations through its verbs (`add`/`done`/`update`/`block`/`unblock`/`ready`/`show`/`mv`/`render`) and rely on its auto-prune+archive instead of hand-editing; `fm-teardown.sh` prints the exact `tasks-axi done` command in that case.
+When `tasks-axi` is absent (the default for this fleet today), hand-edit `data/backlog.md` exactly as this section describes - the format above is unchanged either way.
 
 ## 11. Crewmate briefs
 
