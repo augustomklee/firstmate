@@ -53,6 +53,15 @@ fleet_sync() {
   rm -f "$tmp"
 }
 
+# Eagerly ensure the dedicated crewmate session exists at startup, so the captain
+# can attach to it immediately and crewmate windows (fm-spawn always targets this
+# session) never land in the captain's own session. Best-effort: a missing or
+# unhappy multiplexer must never block bootstrap.
+ensure_crew_session() {
+  command -v "$FM_MUX" >/dev/null 2>&1 || return 0
+  "$FM_MUX" has-session -t firstmate 2>/dev/null || "$FM_MUX" new-session -d -s firstmate 2>/dev/null || true
+}
+
 install_cmd() {
   case "$1" in
     psmux) echo "scoop bucket add psmux https://github.com/psmux/scoop-psmux && scoop install psmux" ;;
@@ -86,5 +95,6 @@ gh auth status >/dev/null 2>&1 || echo "NEEDS_GH_AUTH"
 crew=
 [ -f "$FM_ROOT/config/crew-harness" ] && crew=$(tr -d '[:space:]' < "$FM_ROOT/config/crew-harness" || true)
 [ -n "$crew" ] && [ "$crew" != "default" ] && echo "CREW_HARNESS_OVERRIDE: $crew"
+ensure_crew_session
 fleet_sync
 exit 0

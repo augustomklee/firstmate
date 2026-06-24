@@ -101,13 +101,13 @@ BRIEF="$FM_ROOT/data/$ID/brief.md"
 [ -f "$BRIEF" ] || { echo "error: no brief at $BRIEF" >&2; exit 1; }
 PROJ_ABS="$(cd "$PROJ" && pwd)"
 
-# Same session when firstmate already runs inside the multiplexer; dedicated otherwise.
-if [ -n "${TMUX:-}" ]; then
-  SES=$("$FM_MUX" display-message -p '#S')
-else
-  "$FM_MUX" has-session -t firstmate 2>/dev/null || "$FM_MUX" new-session -d -s firstmate
-  SES=firstmate
-fi
+# Crewmate windows always live in a dedicated "firstmate" session, never the
+# session the captain is actively using, so they never flood it - whether or not
+# firstmate itself runs inside the multiplexer. fm-bootstrap creates this session
+# eagerly at startup; this has-session guard keeps the lazy creation idempotent
+# for a crewmate spawned before bootstrap or after a restart.
+"$FM_MUX" has-session -t firstmate 2>/dev/null || "$FM_MUX" new-session -d -s firstmate
+SES=firstmate
 
 W="fm-$ID"
 T="$SES:$W"
