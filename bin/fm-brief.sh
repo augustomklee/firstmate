@@ -61,6 +61,9 @@ The report is the only thing that survives, so anything worth keeping must be in
 5. If you hit the same obstacle twice, append \`blocked: {why}\` and stop; firstmate will help.
 6. If a decision belongs to a human (product choices, destructive actions),
    append \`needs-decision: {summary of options}\` and stop. Firstmate will reply with the decision.
+7. Run long-running commands (dependency installs, builds, long analyses) in the FOREGROUND and read
+   their result inline, or poll in a bounded inline loop. Do NOT end your turn waiting on a background
+   command's completion notification: it will not reliably wake you and you will stall mid-task.
 
 # Definition of done
 Write your findings to \`$FM_ROOT/data/$ID/report.md\`.
@@ -144,6 +147,9 @@ $RULE1
 5. If you hit the same obstacle twice, append \`blocked: {why}\` and stop; firstmate will help.
 6. If a decision belongs to a human (product choices, destructive actions, ask-user findings),
    append \`needs-decision: {summary of options}\` and stop. Firstmate will reply with the decision.
+7. Run long-running commands (dependency installs, builds, validation polls) in the FOREGROUND and read
+   their result inline, or poll in a bounded inline loop. Do NOT end your turn waiting on a background
+   command's completion notification: it will not reliably wake you and you will stall mid-task.
 
 # Project memory
 If \`CLAUDE.md\` already exists, or if this task produced durable project-intrinsic knowledge, run \`$FM_ROOT/bin/fm-ensure-claude-md.sh .\` in the worktree.
