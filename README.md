@@ -152,6 +152,7 @@ The first mate drives these; you rarely need to, but they work by hand too.
 | `fm-teardown.sh`         | Return the worktree and kill the window; protects ship work, requires scout reports, and reminds backlog refresh    |
 | `fm-harness.sh`          | Detect the running harness; resolve the effective crewmate harness                                                  |
 | `fm-lock.sh`             | Single-firstmate session lock                                                                                       |
+| `fm-port.sh`             | Report-only fork-aware upstream porter: list + classify commits upstream has that this fork lacks (clean / needs-adapt / likely-skip) |
 
 ## Configuration
 
@@ -202,6 +203,7 @@ shellcheck bin/*.sh tests/*.sh            # lint the toolbelt and behavior tests
 for test_script in tests/*.test.sh; do "$test_script"; done   # behavior tests, matching CI
 tests/fm-wake-queue.test.sh               # durable wake queue, singleton behavior, sub-supervisor classifier, and /afk presence-gating tests
 tests/fm-composer-ghost.test.sh           # dim-ghost stripping and border-aware composer detection (fm-tmux-lib.sh)
+tests/fm-port.test.sh                     # fork-aware upstream porter: commit classification buckets and report-only (no merge path)
 tests/fm-afk-inject-e2e.test.sh           # private-socket end-to-end test of the afk injection path (partial-input deferral, swallowed-Enter retry)
 [ ! -e AGENTS.md ] && [ -f CLAUDE.md ] && [ ! -L CLAUDE.md ]
 [ "$(readlink .claude/skills)" = "../.agents/skills" ]
