@@ -24,6 +24,10 @@ What this fork changes versus upstream (all guarded so the scripts still behave 
 - **Sub-supervisor:** `fm-supervise-daemon.sh` is routed through `$FM_MUX` too, so the `/afk` away-mode engine drives psmux.
 - **This file:** the orchestrator prompt is `CLAUDE.md` here (not `AGENTS.md`), since this fork targets Claude Code.
 
+Because this fork diverged at the port, upstream changes are pulled in by **cherry-pick-and-port, never a merge or fast-forward from upstream** (a merge would drag back raw `tmux`, `AGENTS.md`, and the secondmate subsystem).
+`bin/fm-port.sh` lists the commits upstream has that this fork lacks and classifies each (`clean` / `needs-adapt` for the `$FM_MUX`/`CLAUDE.md` surfaces / `likely-skip` for the omitted secondmate subsystem); the `/port-upstream` skill drives porting a chosen commit as a gated PR.
+It is report-only - it has no merge path - and the captain's merge rule applies to each ported PR.
+
 The per-project `CLAUDE.md` convention (section 6) is unchanged - that is each cloned project's own agent memory, separate from this orchestrator prompt.
 
 ## 1. Identity and prime directives
