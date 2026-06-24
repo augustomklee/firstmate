@@ -53,8 +53,9 @@
 #          Long-lived background loop. Normally started by the /afk skill, which
 #          sets state/.afk first. Env knobs:
 #          FM_SUPERVISOR_TARGET     supervisor multiplexer target (override; otherwise
-#                                   auto-discovered from TMUX_PANE, then
-#                                   firstmate:0 fallback)
+#                                   auto-discovered from TMUX_PANE. With neither set
+#                                   there is no fallback - startup fails loudly, since
+#                                   guessing would risk the crewmate session)
 #          FM_INJECT_SKIP           |-prefixes force-self-handle bypassing
 #                                   classification (default "heartbeat"); empty
 #                                   disables. Use sparingly: it overrides the
@@ -90,7 +91,12 @@ FM_DAEMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$FM_DAEMON_DIR/fm-mux-lib.sh"
 
 # --- tunables ---------------------------------------------------------------
-FM_SUPERVISOR_TARGET_DEFAULT="firstmate:0"
+# No resolving fallback: "firstmate" is now the dedicated CREWMATE session (see
+# fm-spawn.sh), so an old "firstmate:0" guess would inject into a crewmate window
+# instead of the captain's pane. When neither FM_SUPERVISOR_TARGET nor TMUX_PANE
+# is available we cannot know the supervisor pane, so we leave this empty and let
+# startup validation fail loudly rather than inject into the wrong session.
+FM_SUPERVISOR_TARGET_DEFAULT=""
 INJECT_SKIP_DEFAULT="heartbeat"
 STALE_ESCALATE_SECS_DEFAULT=240
 ESCALATE_BATCH_SECS_DEFAULT=90
@@ -220,10 +226,10 @@ _collapse_newlines() {  # <text>
 #   1. FM_SUPERVISOR_TARGET env (explicit override) — caller passes it in.
 #   2. $TMUX_PANE — tmux sets this in every pane's environment; inherited by
 #      the daemon when the /afk skill launches it from firstmate's own pane.
-#   3. firstmate:0 — legacy fallback (may not resolve if the session is named
-#      differently). The caller logs a warning in that case.
-# Returns the resolved target on stdout; returns 1 if only the fallback is left
-# AND the fallback does not resolve to a live pane.
+# There is intentionally NO positional fallback: "firstmate" is the dedicated
+# crewmate session now, so any guess there would target a crewmate window. When
+# neither source is set, returns the empty default and rc 1; the caller warns and
+# startup validation then fails loudly (better than injecting into the wrong pane).
 discover_supervisor_target() {
   if [ -n "${FM_SUPERVISOR_TARGET:-}" ]; then
     printf '%s' "$FM_SUPERVISOR_TARGET"
@@ -715,22 +721,23 @@ fm_super_main() {
 
   # --- auto-discover the supervisor target (the pane running firstmate) -----
   # Priority: FM_SUPERVISOR_TARGET override > $TMUX_PANE (inherited from the
-  # pane that launched the daemon, normally firstmate's own) > firstmate:0
-  # fallback. Exporting the result into FM_SUPERVISOR_TARGET makes inject_msg
-  # (which reads that env var) use the discovered pane without an extra global.
+  # pane that launched the daemon, normally firstmate's own). No positional
+  # fallback - "firstmate" is the crewmate session now. Exporting the result
+  # into FM_SUPERVISOR_TARGET makes inject_msg (which reads that env var) use the
+  # discovered pane without an extra global.
   local discovered target_source
   target_source="FM_SUPERVISOR_TARGET"
   if [ -z "${FM_SUPERVISOR_TARGET:-}" ]; then
     if [ -n "${TMUX_PANE:-}" ]; then
       target_source="TMUX_PANE"
     else
-      target_source="FALLBACK(firstmate:0)"
+      target_source="UNRESOLVED"
     fi
   fi
   if discovered=$(discover_supervisor_target); then
     : # resolved cleanly
   else
-    echo "warn: could not auto-discover supervisor pane (no FM_SUPERVISOR_TARGET or TMUX_PANE); falling back to '$discovered' — verify this is firstmate's pane" >&2
+    echo "warn: could not auto-discover supervisor pane (no FM_SUPERVISOR_TARGET or TMUX_PANE); set FM_SUPERVISOR_TARGET to firstmate's pane" >&2
   fi
   FM_SUPERVISOR_TARGET="$discovered"
   local TARGET="$FM_SUPERVISOR_TARGET"
