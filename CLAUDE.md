@@ -91,7 +91,7 @@ state/               volatile runtime signals; gitignored
   .watch.lock .wake-queue.lock watcher singleton and queue serialization locks
   .hash-* .count-* .stale-* .seen-* .last-* .heartbeat-streak   watcher internals; never touch
   .last-watcher-beat watcher liveness beacon, touched every poll; fm-guard.sh reads it
-  .subsuper-* .supervise-daemon.*   sub-supervisor internals (stale markers, escalation buffer, seen-status dedup, log, lock, pid); never touch
+  .subsuper-* .supervise-daemon.*   sub-supervisor internals (stale markers, escalation buffer, seen-status dedup, inject-wedged alarm marker, log, lock, pid); never touch
 .no-mistakes/        local validation state and evidence; gitignored
 ```
 
@@ -157,6 +157,7 @@ When you verify a new adapter, record its env marker and command name in that sc
 
 First launch in a fresh worktree (or first ever on a machine) may show a trust or bypass-permissions confirmation.
 After every spawn, peek the pane within ~20s; if such a dialog is showing, accept it with `bin/fm-send.sh <window> --key Enter` (or the choice the dialog requires) and verify the brief started processing.
+claude crewmates are launched with `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false` (a per-launch env prefix in `fm-spawn.sh`, scoped to firstmate-launched agents - it never touches the captain's global config) so claude's dim predicted-next-prompt ghost text does not fill an idle composer and read like pending input; the dim-aware composer reader in `bin/fm-tmux-lib.sh` is the defense-in-depth backstop.
 
 ### codex (VERIFIED 2026-06-11, codex-cli 0.139.0)
 
@@ -479,7 +480,7 @@ The marker travels with the message text; it does not rely on harness-level type
 **Exiting afk (the captain's contract).** When firstmate receives a message while afk is active:
 - Leading marker present → **internal escalation**. Stay afk, process it.
 - Message starts with `/afk` → **afk re-invocation**. Stay afk (refresh the flag); do not treat as a return.
-- Anything else → **the captain is back.** Clear `state/.afk`, stop the daemon, flush one distilled "while you were out" catch-up (drain `state/.wake-queue` + summarize any pending `state/.subsuper-escalations`), and resume full per-wake responsiveness (arm `bin/fm-watch.sh`).
+- Anything else → **the captain is back.** Clear `state/.afk`, stop the daemon, flush one distilled "while you were out" catch-up (drain `state/.wake-queue` + summarize any pending `state/.subsuper-escalations` and any `state/.subsuper-inject-wedged` marker), and resume full per-wake responsiveness (arm `bin/fm-watch.sh`).
 **Bias ambiguous cases toward exit** (a present captain beats token savings; a false exit is self-correcting).
 
 **Orthogonal to yolo.** afk changes how aggressively firstmate surfaces things, not who approves what. "Away" never means "approves more" — a PR, a needs-decision finding, or anything destructive still waits for the captain's explicit word.
@@ -497,8 +498,9 @@ This is why fewer, cheaper firstmate turns handle the same fleet.
 
 **Injection hardening (the fixes):**
 - **Single-line digest** — embedded newlines are collapsed to a literal separator before injection, so submission is unambiguous regardless of harness.
-- **Composer guard on the supervisor pane** — before injecting, the daemon checks both `pane_is_busy` (harness busy footer = agent mid-turn) and `pane_input_pending` (non-empty cursor line = human mid-typing or previous injection with swallowed Enter). Either condition **defers** the injection (buffer preserved for retry). This is the human-in-the-pane safety property: the daemon never merges its digest into the captain's half-typed line.
-- **Type-once submit model** — the digest is typed once via `send-keys -l`, then submitted with Enter. If the composer still has text after Enter (swallowed Enter), the daemon retries Enter only (never retypes the digest), preventing concatenation of two sentinel-prefixed digests into one corrupted turn.
+- **Composer guard on the supervisor pane** — before injecting, the daemon checks both `fm_pane_is_busy` (harness busy footer = agent mid-turn) and `fm_pane_input_pending` (real text on the cursor line = human mid-typing or previous injection with swallowed Enter). The pending check **strips the composer's box-drawing borders and dim/faint ghost text first**, so an idle bordered or ghost-filled claude composer reads as empty, not pending (incident afk-invx-i5: the old bare-prompt-only check deferred 100% of escalations for 9.5h). Either condition **defers** the injection (buffer preserved for retry). These primitives live in `bin/fm-tmux-lib.sh`, shared with `fm-send.sh`.
+- **Type-once verified submit** — the digest is typed once via `send-keys -l`, then submitted with Enter and verified against the same border/ghost-aware detector: Enter is retried (Enter only, never a retype) until the composer is confirmed empty, preventing concatenation of two sentinel-prefixed digests into one corrupted turn. `fm-send.sh` shares the primitive and exits non-zero on a positively-confirmed swallow.
+- **Max-defer escape (never silently wedge)** — anything buffered past `FM_MAX_DEFER_SECS` (default 300) triggers one more flush attempt; if delivery still cannot be confirmed, a rate-limited wedge alarm fires (ERROR log + durable `state/.subsuper-inject-wedged` marker + supervisor status-line flash), so a guard false-positive becomes a visible stall rather than an unbounded silent no-op.
 - **Marker strip** — `strip_injection_marker` removes the sentinel prefix before classification/relay, so the digest text firstmate sees is clean.
 - **Portable singleton lock** — the daemon uses the repo's mkdir-based lock helper (`fm-wake-lib.sh`) instead of `flock`, which is absent on macOS.
 - **Dedupe across signal/stale/scan** — `classify_signal` and `classify_stale` both check the seen-status marker before escalating, so a status escalated by one path is not re-escalated by another in the same digest.
