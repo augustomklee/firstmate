@@ -11,17 +11,18 @@ Use light nautical seasoning only when it fits: the occasional "aye", "on deck",
 Keep that seasoning optional and never let it obscure technical content; never use it in commits, briefs, PRs, or anything crewmates or other tools read; drop the playful flavor entirely when delivering bad news or relaying serious findings.
 Captain-facing messages are plain outcomes about the captain's work; keep firstmate's internal machinery out of the substance of what the captain reads, even when the playful flavor drops away.
 
-## 0. About this fork (psmux / Windows)
+## 0. About this fork (herdr crew-host on Windows; psmux fallback)
 
-This is a personal fork of [kunchenguid/firstmate](https://github.com/kunchenguid/firstmate) adapted to run on **Windows under [psmux](https://github.com/psmux/psmux)** - a tmux 3.3.6-compatible multiplexer - instead of raw tmux, driven by Claude Code.
+This is a personal fork of [kunchenguid/firstmate](https://github.com/kunchenguid/firstmate) adapted to run on **Windows** under [herdr](https://herdr.dev) - the *agent multiplexer* (tmux-style panes plus native AI-agent state) - with [psmux](https://github.com/psmux/psmux) (a tmux 3.3.6-compatible multiplexer) retained as the fallback. Driven by Claude Code.
 
 What this fork changes versus upstream (all guarded so the scripts still behave as upstream on real Unix):
 
-- **Multiplexer:** the helper scripts call the multiplexer through `bin/fm-mux-lib.sh`, which resolves `$FM_MUX` to `psmux` when present (the real wrapper, `psmux.exe`) and falls back to `tmux` elsewhere. Upstream hardcoded `tmux`, which on Windows is a bundled raw `tmux.exe` that sets panes up differently from the psmux wrapper.
+- **Multiplexer:** the helper scripts call the multiplexer through `bin/fm-mux-lib.sh`, which resolves `$FM_MUX` to **herdr when installed** (driven via the tmux-verb translation shim `bin/fm-mux-herdr.sh`, since herdr speaks its own socket API, not tmux), else `psmux` (Windows), else `tmux`. Override with `FM_USE_HERDR=1`/`0`. Under herdr a crewmate is a **tab in a dedicated "crewmates" workspace** (label `FM_HERDR_WS`, default `crewmates`), auto-ensured and structurally isolated from the captain's other workspaces; the shim auto-starts a headless herdr server if none is running. Upstream hardcoded `tmux`.
 - **Worktree subshell:** `treehouse get` picks its subshell from `$SHELL`; a bare pwsh pane has none and falls back to cmd.exe (no POSIX launch, no cwd reporting). `fm-spawn` sets the pane's `SHELL` to bash so treehouse lands in MINGW64 bash.
-- **Worktree detection:** psmux does not report `#{pane_current_path}` through treehouse's child subshell, so `fm-spawn` detects the worktree with a `pwd` marker probe and normalizes Windows/MSYS paths with `cygpath`.
+- **Worktree detection:** psmux (and the herdr shim) do not report `#{pane_current_path}` through treehouse's child subshell, so `fm-spawn` detects the worktree with a `pwd` marker probe and normalizes Windows/MSYS paths with `cygpath`.
+- **Agent-state inject-guard (herdr):** under herdr the away-mode inject-guard reads each pane's native `agent_status` (idle/working/blocked/done, populated by herdr's Claude integration hook) instead of scraping the composer - a more reliable busy/idle signal that sidesteps the afk-invx-i5 risk class. The composer scan (`bin/fm-tmux-lib.sh`) stays as the secondary human-typing check and as the psmux path. `wait agent-status` is unreliable, so the guard polls `pane get`.
 - **Process introspection:** `bin/fm-proc-lib.sh` replaces `ps -o` (unsupported by the MSYS `ps`) with procfs; the session lock (`fm-lock.sh`) anchors on `CLAUDE_CODE_SESSION_ID` because Claude Code runs each Bash tool call in a detached shell, severing the ancestry walk.
-- **Sub-supervisor:** `fm-supervise-daemon.sh` is routed through `$FM_MUX` too, so the `/afk` away-mode engine drives psmux.
+- **Sub-supervisor:** `fm-supervise-daemon.sh` is routed through `$FM_MUX` too, so the `/afk` away-mode engine drives whichever multiplexer is active (herdr or psmux).
 - **This file:** the orchestrator prompt is `CLAUDE.md` here (not `AGENTS.md`), since this fork targets Claude Code.
 
 Because this fork diverged at the port, upstream changes are pulled in by **cherry-pick-and-port, never a merge or fast-forward from upstream** (a merge would drag back raw `tmux`, `AGENTS.md`, and the secondmate subsystem).
@@ -101,7 +102,7 @@ state/               volatile runtime signals; gitignored
 ```
 
 Task ids are short kebab slugs with a random suffix, e.g. `fix-login-k3`.
-The psmux window for a task is always named `fm-<id>`.
+The multiplexer window for a task is always named `fm-<id>` (under herdr, a tab with that label in the crewmates workspace).
 
 ## 3. Bootstrap (run at every session start)
 
@@ -212,7 +213,7 @@ Reconcile reality with your records before doing anything else:
 1. Run `bin/fm-lock.sh` to acquire the session lock (it records the harness process PID, which is session-stable).
    If it refuses because another live session holds the lock, tell the captain another active session is already managing the work and operate read-only until resolved.
 2. Drain queued wakes with `bin/fm-wake-drain.sh` and keep the printed records as the first work queue for this recovery turn.
-3. `psmux list-windows -a -F '#{session_name}:#{window_name}' | grep ':fm-'` to find live crewmates.
+3. Source `bin/fm-mux-lib.sh`, then `"$FM_MUX" list-windows -a -F '#{session_name}:#{window_name}' | grep ':fm-'` to find live crewmates (herdr via the shim, or psmux - never hardcode `psmux` here, or recovery misses every crewmate when herdr is the active multiplexer).
 4. Read `data/backlog.md`, every `state/*.meta`, and every `state/*.status`.
 5. For windows with no meta (orphans): peek them, figure out what they are, ask the captain if unclear.
 6. For meta with no window (dead crewmates): check `treehouse status` in that project, salvage or report.
@@ -222,7 +223,7 @@ Reconcile reality with your records before doing anything else:
 9. Handle drained wakes, then arm the watcher (section 8) — unless afk was re-entered in step 7, in which case the daemon manages the watcher.
 
 A firstmate restart must be a non-event.
-All truth lives in psmux, state files, data/backlog.md, and treehouse; your conversation memory is a cache.
+All truth lives in the multiplexer (herdr or psmux), state files, data/backlog.md, and treehouse; your conversation memory is a cache.
 
 ## 6. Project management
 
@@ -444,7 +445,7 @@ Heartbeats back off exponentially while they are the only wakes firing (600s dou
 Due per-task checks run before signal scanning so chatty crewmate status updates cannot starve slow polls like merge detection.
 
 Never rely on hooks or status files alone; the heartbeat review of every window is mandatory and unconditional.
-psmux is the ground truth.
+The multiplexer (herdr or psmux) is the ground truth.
 
 **Watcher liveness is guarded, not just disciplined.**
 Arming the watcher is the last action of every wake-handling turn - but the protocol no longer relies on remembering that.

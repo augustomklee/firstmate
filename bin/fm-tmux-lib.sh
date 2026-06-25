@@ -47,6 +47,17 @@
 # interrupt"; opencode: "esc interrupt"; pi: "Working...".
 FM_TMUX_BUSY_REGEX_DEFAULT='esc (to )?interrupt|Working\.\.\.'
 
+# Herdr agent-state fast-path. When $FM_MUX is the herdr translation shim, the
+# crew host exposes a native per-pane agent_status (idle|working|blocked|done|
+# unknown), populated by herdr's Claude integration hook. That is a far more
+# reliable busy/idle signal than scraping the composer, and using it as the
+# primary signal sidesteps the afk-invx-i5 risk class (an idle bordered/ghost
+# composer misread as pending input, which deferred 100% of escalations for
+# 9.5h). The composer scan below is kept only as the SECONDARY check for genuine
+# human-typed text while the agent is idle.
+fm_is_herdr() { case "$FM_MUX" in *fm-mux-herdr.sh) return 0 ;; *) return 1 ;; esac; }
+fm_herdr_agent_status() { "$FM_MUX" agent-status -t "$1" 2>/dev/null; }
+
 # fm_tmux_strip_ghost: remove dim/faint (ANSI SGR 2) styled runs from one captured
 # composer line, then drop any remaining escape sequences, leaving only the plain,
 # normal-intensity text, the text a human actually typed. Dim/faint runs are
@@ -128,6 +139,15 @@ fm_tmux_strip_ghost() {
 # character classes), and asks whether anything real is left.
 fm_tmux_composer_state() {  # <target> -> empty|pending|unknown
   local target=$1 cy raw line stripped
+  # Herdr: trust the native agent_status first. A working agent has consumed the
+  # input (so the composer is "empty" for inject/submit-ack purposes); only when
+  # the agent is idle/done/blocked do we fall through to the composer scan to
+  # catch genuine human-typed text on the cursor line.
+  if fm_is_herdr; then
+    case "$(fm_herdr_agent_status "$target")" in
+      working) printf 'empty'; return 0 ;;
+    esac
+  fi
   cy=$("$FM_MUX" display-message -p -t "$target" '#{cursor_y}' 2>/dev/null) || { printf 'unknown'; return 0; }
   case "$cy" in ''|*[!0-9]*) printf 'unknown'; return 0 ;; esac
   raw=$("$FM_MUX" capture-pane -e -p -t "$target" -S "$cy" -E "$cy" 2>/dev/null) || { printf 'unknown'; return 0; }
@@ -167,6 +187,11 @@ fm_pane_input_pending() {  # <target>
 # (an agent mid-turn). Scans a 40-line tail like fm-watch.sh.
 fm_pane_is_busy() {  # <target>
   local win=$1 tail40
+  # Herdr: the native agent_status is authoritative (working = mid-turn).
+  if fm_is_herdr; then
+    [ "$(fm_herdr_agent_status "$win")" = working ]
+    return
+  fi
   tail40=$("$FM_MUX" capture-pane -p -t "$win" -S -40 2>/dev/null) || return 1
   printf '%s' "$tail40" | grep -v '^[[:space:]]*$' | tail -6 \
     | grep -qiE "${FM_BUSY_REGEX:-$FM_TMUX_BUSY_REGEX_DEFAULT}"
