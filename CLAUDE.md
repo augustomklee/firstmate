@@ -132,6 +132,7 @@ Treat any harness memory of these preferences as a recall cache only; `data/capt
 Do not dispatch any work until the tools that work needs are present and GitHub auth is good.
 Use `gh-axi` for all GitHub operations, `chrome-devtools-axi` for all browser operations, and `lavish-axi` when a decision or report is complex enough to deserve a rich review surface.
 Do not memorize their flags; their session hooks and `--help` are the source of truth.
+Exception for `lavish-axi`: build the artifact by following the `/lavish` skill (`~/.claude/skills/lavish/SKILL.md`), not the tool's own `--help` design guidance. The skill mandates a shared Tokyo Night house style (start from `~/.claude/skills/lavish/assets/house-style.html`) that `lavish-axi --help` does not know about - drive the CLI through the skill's workflow so every review artifact stays on theme.
 If the captain names a different crewmate harness at bootstrap or later, write it to `config/crew-harness` (local, gitignored); that is the whole switch.
 
 ## 4. Harness adapters
